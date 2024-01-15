@@ -1,92 +1,146 @@
-{
+rec {
   description = "All in one nix config";
 
   nixConfig = {
     auto-optimise-store = true;
-    experimental-features = [ "nix-command" "flakes" ];
+    experimental-features = [
+      "nix-command"
+      "flakes"
+    ];
     substituters = [
       "https://mirrors.ustc.edu.cn/nix-channels/store" # 中科大
       "https://mirrors.tuna.tsinghua.edu.cn/nix-channels/store" # 清华
-      "https://mirrors.bfsu.edu.cn/nix-channels/store" # 北外
+      #"https://mirrors.bfsu.edu.cn/nix-channels/store" # 北外
       "https://mirror.sjtu.edu.cn/nix-channels/store" # 交大
-      "https://nixos-cn.cachix.org"
+      #"https://nixos-cn.cachix.org"
       "https://cache.nixos.org/"
     ];
   };
 
   inputs = {
-    nixpkgs.url = "nixpkgs/nixos-23.11";
-    nixpkgs-darwin.url = "nixpkgs/nixpkgs-23.11-darwin";
+    nixpkgs.url = "nixpkgs/nixos-24.05";
+    nixpkgs-darwin.url = "nixpkgs/nixpkgs-24.05-darwin";
     nixpkgs-unstable.url = "nixpkgs/nixos-unstable";
     impermanence.url = "github:nix-community/impermanence";
+    hardware.url = "nixos-hardware/master";
+
+    nixpkgs-wayland = {
+      url = "github:nix-community/nixpkgs-wayland";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    wsl = {
+      url = "github:nix-community/NixOS-WSL";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     darwin = {
       url = "github:lnl7/nix-darwin/master";
       inputs.nixpkgs.follows = "nixpkgs-darwin";
     };
+
     home-manager = {
-      url = "github:nix-community/home-manager/release-23.11";
+      url = "github:nix-community/home-manager/release-24.05";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    vscode-server = {
+      url = "github:nix-community/nixos-vscode-server";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    disko = {
+      url = "github:nix-community/disko/latest";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    nixos-anywhere = {
+      url = "github:nix-community/nixos-anywhere";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { nixpkgs, nixpkgs-unstable, impermanence, home-manager, darwin, ... }: 
-  let
-    system = "x86_64-linux";
-    allowUnfree = true;
-    pkgs = import nixpkgs {
-      inherit system;
-      config.allowUnfree = allowUnfree;
-    };
-    
-    pkgs-unstable = import nixpkgs-unstable {
-      inherit system;
-      config.allowUnfree = allowUnfree;
-    };
+  outputs =
+    {
+      nixpkgs,
+      nixpkgs-unstable,
+      nixpkgs-wayland,
+      hardware,
+      home-manager,
+      vscode-server,
+      impermanence,
+      darwin,
+      wsl,
+      disko,
+      nixos-anywhere,
+      ...
+    }:
+    let
+      system = "x86_64-linux";
+      allowUnfree = true;
 
-    genSystem = config: nixpkgs.lib.nixosSystem {
-      system = if config?system then config.system else system;
-
-      specialArgs = {
-        inherit pkgs;
-        inherit pkgs-unstable;
+      pkgs = import nixpkgs {
+        inherit system;
+        config.allowUnfree = allowUnfree;
       };
 
-      modules = [
-        impermanence.nixosModules.impermanence 
-      ] ++ config.modules ++ (if config?home-manager then [
-        home-manager.nixosModules.home-manager
-        {
-          home-manager.useGlobalPkgs = true;
-          home-manager.useUserPackages = true;
-          home-manager.users = config.home-manager;
-        }
-      ] else []);
-    };
-  in {
+      pkgs-unstable = import nixpkgs-unstable {
+        inherit system;
+        config.allowUnfree = allowUnfree;
+      };
 
-    devShells."${system}".default = pkgs.mkShell {
-      packages = with pkgs; [
-        nixos-rebuild
-        gnumake
-      ];
-    };
+      pkgs-wayland = import nixpkgs-wayland {
+        inherit system;
+        config.allowUnfree = allowUnfree;
+      };
 
-    nixosConfigurations.default = genSystem {
-      modules = [
-        ./devices/default
-      ];
-    };
+      substituters = nixConfig.substituters;
+      secret = import ./secret.nix;
 
-    darwinConfigurations."mbp" = darwin.lib.darwinSystem {
-      system = "x86_64-darwin";
-        modules = [ 
-        ./devices/mbp
-        home-manager.darwinModules.home-manager {
-          home-manager.useGlobalPkgs = true;
-          home-manager.useUserPackages = true;
-          home-manager.users.tonychyi = import ./home/users/tonychyi-mbp;
-        }
-      ];
+      inherit (import ./consts.nix) persistencePath username rootMountOptions;
+    in
+    {
+      devShells."${system}".default = pkgs.mkShell {
+        packages = with pkgs; [
+          nixos-rebuild
+          gnumake
+        ];
+      };
+
+      packages."${system}" = (import ./packages.nix) { inherit system nixos-anywhere disko; };
+
+      nixosConfigurations = (import ./modules/nixos.nix) {
+        inherit
+          nixpkgs
+          nixpkgs-wayland
+          impermanence
+          hardware
+          home-manager
+          pkgs
+          pkgs-unstable
+          pkgs-wayland
+          system
+          wsl
+          disko
+          vscode-server
+          username
+          persistencePath
+          rootMountOptions
+          substituters
+          secret
+          ;
+      };
+
+      darwinConfigurations = (import ./modules/darwin.nix) { inherit darwin home-manager substituters; };
+
+      homeConfigurations = (import ./modules/home-manager.nix) {
+        inherit
+          nixpkgs
+          home-manager
+          vscode-server
+          system
+          substituters
+          ;
+      };
     };
-  };
 }

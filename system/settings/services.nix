@@ -1,0 +1,1 @@
+{ services.logrotate.checkConfig = false; }
