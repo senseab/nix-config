@@ -1,3 +1,5 @@
+> Now archived for reference.
+
 # Nix Config Merged
 
 Merge all my nix config.
