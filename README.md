@@ -2,13 +2,17 @@
 
 Merge all my nix config.
 
+Here is no any sensitive password, see [secret.nix](secret.nix)
+
 ## Directory
 
 * `system` - all shared system wide config.
 * `home` - home-manager configs.
-* `lib` - custom software.
+* `lib` - custom software and some utils.
 * `devices` - my device running nix-related-entity.
 * `users` - settings for user, merged with system config and home-manager.
+* `modules` - nixos, macos, home-manager settings here.
+* `assets` - wallpaper, or any other files.
 
 ## Install
 
